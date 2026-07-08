@@ -1,0 +1,58 @@
+module OU(
+    input [7:0] SW,
+    output [0:6] HEX0, HEX1, HEX2, HEX3
+);
+
+    wire [7:0] signed_mag;
+    wire [7:0] magnitude_val;
+    wire [3:0] ones, tens;
+    wire [1:0] hundreds;
+
+    // -------------------------------------------------------------------------
+    // Step 1: Convert from two’s complement → sign-magnitude
+    // -------------------------------------------------------------------------
+    twoSIGN unit1(
+        .A(SW),
+        .B(signed_mag)
+    );
+    defparam unit1.N = 8;
+
+    // -------------------------------------------------------------------------
+    // Step 2: Extract magnitude ONLY (ignore sign bit)
+    // -------------------------------------------------------------------------
+    assign magnitude_val = {1'b0, signed_mag[6:0]};
+
+    // -------------------------------------------------------------------------
+    // Step 3: Binary → BCD
+    // -------------------------------------------------------------------------
+    binary2bcd unit2 (
+        .A(magnitude_val),
+        .ONES(ones),
+        .TENS(tens),
+        .HUNDREDS(hundreds)
+    );
+
+    // -------------------------------------------------------------------------
+    // Step 4: BCD → 7-segment (use your original port names)
+    // -------------------------------------------------------------------------
+    bcd2seven d0(
+        .bcd(ones),
+        .display(HEX0)
+    );
+
+    bcd2seven d1(
+        .bcd(tens),
+        .display(HEX1)
+    );
+
+    bcd2seven d2(
+        .bcd({2'b00, hundreds}),
+        .display(HEX2)
+    );
+
+    // -------------------------------------------------------------------------
+    // Step 5: Sign display (use converted sign, NOT SW directly)
+    // -------------------------------------------------------------------------
+    assign HEX3 = signed_mag[7] ? 7'b1111110 : 7'b1111111;
+
+endmodule

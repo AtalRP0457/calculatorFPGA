@@ -1,0 +1,96 @@
+module CU
+(
+   input logic trig,
+   input logic clr,
+   input logic clearEntry,
+   input [3:0] val,
+   output logic Reset,
+   output logic LoadX,
+   output logic LoadY,
+   output logic AddSub,
+   output logic LoadR,
+   output logic IUAU
+);
+   logic [2:0] state, nextstate;
+   logic addsub_reg;
+   parameter
+       s0 = 3'b000,
+       s1 = 3'b001,
+       s2 = 3'b010,
+       s3 = 3'b011,
+       s4 = 3'b100;
+   logic [3:0] add, sub, enter;
+   assign add = 4'b1010;
+   assign sub = 4'b1011;
+   assign enter = 4'b1111;
+   always_ff @(negedge trig, negedge clr) begin
+       if(clr == 1'b0)
+           state <= s0;
+       else
+           state <= nextstate;
+   end
+   always_ff @(negedge trig, negedge clr) begin
+       if (clr == 1'b0)
+           addsub_reg <= 0;
+       else if (state == s1) begin
+           if (val == add)
+               addsub_reg <= 0;
+           else if (val == sub)
+               addsub_reg <= 1;
+       end
+   end
+   always_comb begin
+       nextstate = state;
+       case(state)
+           s0: begin
+               if((val != add && val != sub) && trig == 1)
+                   nextstate = s1;
+               else
+                   nextstate = s0;
+           end
+           s1: begin
+               if((val == add || val == sub) && trig == 1)
+                   nextstate = s2;
+               else
+                   nextstate = s1;
+           end
+           s2: begin
+               if((val != enter && val != add && val != sub) && trig == 1)
+                   nextstate = s3;
+               else
+                   nextstate = s2;
+           end
+           s3: begin
+               if(val == enter && trig == 1)
+                   nextstate = s4;
+               else
+                   nextstate = s3;
+           end
+           s4: begin
+               nextstate = s4;
+           end
+           default: nextstate = s0;
+       endcase
+   end
+   always_comb begin
+       Reset = 1; LoadX = 1; LoadY = 1; LoadR = 1; IUAU = 0;
+       AddSub = addsub_reg;
+       case(state)
+           s0: begin
+               Reset = 0;
+           end
+           s1: begin
+               LoadX = 0;
+           end
+           s2: begin
+           end
+           s3: begin
+               LoadY = 0;
+           end
+           s4: begin
+               LoadR = 0;
+               IUAU = 1;  
+           end
+       endcase
+   end
+endmodule

@@ -1,0 +1,37 @@
+module twoSIGN #(parameter N = 8) (
+    input [N-1:0] A,
+    output [N-1:0] B
+);
+    wire sign;
+    wire [N-2:0] magnitude;
+    wire [N-2:0] xor_val;
+    wire [N-1:0] carry;
+
+    // 1. Extract the sign bit (the 8th bit)
+    assign sign = A[N-1];
+    
+    // 2. Extract the magnitude (the lower 7 bits)
+    assign magnitude = A[N-2:0];
+
+    // 3. XOR only the magnitude bits with the sign bit
+    assign xor_val = magnitude ^ {(N-1){sign}};
+    
+    // 4. Carry starts with the sign (adds 1 if negative)
+    assign carry[0] = sign;
+
+    genvar i;
+    generate
+        for (i = 0; i < N-1; i = i + 1) begin : HA_CHAIN
+            halfADDER HA (
+                .a(xor_val[i]),
+                .b(carry[i]),
+                .s(B[i]), // Result magnitude bits
+                .cout(carry[i+1])
+            );
+        end
+    endgenerate
+
+    // 5. Explicitly set the 8th bit of the output to be the sign bit
+    assign B[N-1] = sign;
+
+endmodule

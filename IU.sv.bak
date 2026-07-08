@@ -1,0 +1,86 @@
+module IU(
+    input [3:0] row,
+    input clk,
+    input reset,
+    output [7:0] led,
+    output [3:0] col,
+    output logic [3:0] value,
+    output logic trig
+);
+
+    wire [15:0] BCD_raw;
+    wire [7:0] BSM;
+
+    // -------------------------
+    // KEYPAD INPUT
+    // -------------------------
+    keypad_input #(4) keypad_input_inst (
+        .clk(clk),
+        .reset(reset),
+        .row(row),
+        .col(col),
+        .out(BCD_raw),
+        .value(value),
+        .trig(trig)
+    );
+
+    // -------------------------
+    // STORE ONLY VALID DIGITS
+    // -------------------------
+    logic [15:0] BCD_reg;
+
+    always_ff @(posedge clk or negedge reset) begin
+        if (!reset)
+            BCD_reg <= 0;
+
+        // ONLY store digits (0–9)
+        else if (trig && value <= 4'd9)
+            BCD_reg <= BCD_raw;
+    end
+
+    // -------------------------
+    // BCD → Binary
+    // -------------------------
+    BCD2BinarySM bcd2bin (
+        .BCD(BCD_reg),
+        .binarySM(BSM)
+    );
+
+    // -------------------------
+    // NEGATIVE FLAG (C key)
+    // -------------------------
+    logic neg_flag;
+
+    always_ff @(posedge clk or negedge reset) begin
+        if (!reset)
+            neg_flag <= 0;
+
+        // C → next number is negative
+        else if (trig && value == 4'b1100)
+            neg_flag <= 1;
+
+        // A, B, F → clear sign
+        else if (trig && (value == 4'b1010 || 
+                          value == 4'b1011 || 
+                          value == 4'b1111))
+            neg_flag <= 0;
+    end
+
+    // -------------------------
+    // APPLY SIGN
+    // -------------------------
+    logic [7:0] final_val;
+
+    assign final_val = (neg_flag) ? (~BSM + 1) : BSM;
+
+    // -------------------------
+    // OUTPUT
+    // -------------------------
+    twoSIGN twos (
+        .A(final_val),
+        .B(led[6:0])
+    );
+
+    assign led[7] = (|led[6:0]) ? final_val[7] : 1'b0;
+
+endmodule

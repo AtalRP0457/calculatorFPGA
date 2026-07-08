@@ -1,0 +1,86 @@
+module calculatortop (
+    input  logic        MAX10_CLK1_50, // 50MHz Clock [cite: 29]
+    input  logic [1:0]  KEY,           // KEY0: ClearAll, KEY1: ClearEntry 
+    input  logic [3:0]  row,           // Keypad rows [cite: 164]
+    output logic [3:0]  col,           // Keypad columns [cite: 164]
+    output logic [0:6]  HEX0, HEX1,    // Seven-segment magnitude [cite: 81]
+    output logic [0:6]  HEX2, HEX3,    // HEX2: Magnitude, HEX3: Sign [cite: 81]
+    output logic [9:0]  LEDR           // LEDR9: Overflow, LEDR8: Zero [cite: 85, 86]
+);
+
+    // Internal Signal Declarations
+    logic [7:0] iu_final_val;
+    logic [3:0] iu_val_raw;
+    logic       iu_trig;
+    logic [7:0] au_result;
+    logic [3:0] au_cc; // Condition codes: {OVR, Cout, NEG, ZERO} [cite: 194]
+    logic [7:0] mux_out;
+
+    // Control Signals from CU [cite: 138]
+    logic ctrl_Reset, ctrl_LoadX, ctrl_LoadY, ctrl_AddSub, ctrl_LoadR, ctrl_IUAU;
+
+    // 1. Input Unit (IU) [cite: 164]
+    // Processes keypad input and converts BCD to 8-bit Sign-Magnitude/2's Comp [cite: 165, 175]
+    IU input_unit (
+        .row(row),
+        .clk(MAX10_CLK1_50),
+        .reset(KEY[0]),      // Key0 is Clear All [cite: 33]
+        .led(),              // Internal LEDs if needed
+        .col(col),
+        .value(iu_val_raw),
+        .trig(iu_trig)
+    );
+    
+    // Note: IU.sv output 'final_val' must be mapped to AU input 'X' [cite: 98, 103, 188]
+    assign iu_final_val = input_unit.final_val; 
+
+    // 2. Control Unit (CU) [cite: 138]
+    // Manages the FSM (S0-S4) based on keypad triggers and values [cite: 126, 139]
+    CU control_unit (
+        .trig(iu_trig),
+        .clr(KEY[0]),
+        .clearEntry(KEY[1]),
+        .val(iu_val_raw),
+        .Reset(ctrl_Reset),
+        .LoadX(ctrl_LoadX),
+        .LoadY(ctrl_LoadY),
+        .AddSub(ctrl_AddSub),
+        .LoadR(ctrl_LoadR),
+        .IUAU(ctrl_IUAU)
+    );
+
+    // 3. Arithmetic Unit (AU8) [cite: 188]
+    // Performs addition/subtraction and stores operands/results in registers [cite: 190, 191, 193]
+    AU8 arithmetic_unit (
+        .X(iu_final_val),
+        .InA(ctrl_LoadX),
+        .InB(ctrl_LoadY),
+        .Out(ctrl_LoadR),
+        .Clear(ctrl_Reset),
+        .Add_Subtract(ctrl_AddSub),
+        .Rout(au_result),
+        .Ccout(au_cc),
+        .HEX0(), .HEX1(), .HEX2() // Using OU for display instead 
+    );
+
+    // 4. Multiplexer (Mux) [cite: 99]
+    // Selects between current Input (IU) and stored Result (AU) for the display [cite: 125]
+    // IUAU = 0: Display Input (S0-S3) | IUAU = 1: Display Result (S4) [cite: 125]
+    assign mux_out = (ctrl_IUAU) ? au_result : iu_final_val;
+
+    // 5. Output Unit (OU) [cite: 178]
+    // Converts 2's complement to Sign-Magnitude for 7-segment display [cite: 180]
+    OU output_unit (
+        .SW(mux_out),
+        .HEX0(HEX0),
+        .HEX1(HEX1),
+        .HEX2(HEX2),
+        .HEX3(HEX3)
+    );
+
+    // 6. Status Indicators [cite: 85, 86]
+    assign LEDR[9] = au_cc[3]; // Overflow bit (OVR) [cite: 194]
+    assign LEDR[8] = au_cc[0]; // Zero bit (ZERO) [cite: 194]
+    assign LEDR[7:0] = 8'b0;
+
+endmodule
